@@ -92,11 +92,18 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--cream);
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
   padding:9px 16px;border-radius:20px;font-size:13px;z-index:80;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
+#offline{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:10px;z-index:90;
+  font-size:12px;font-weight:700;padding:5px 11px;border-radius:14px;white-space:nowrap;
+  box-shadow:0 2px 8px rgba(0,0,0,.18);transition:opacity .4s}
+#offline.ok{background:#2e7d32;color:#fff}
+#offline.wait{background:#E9B949;color:#3A3228}
+#offline.err{background:#E76F51;color:#fff}
 </style>
 </head>
 <body>
 <div id="viewport"><div id="canvas"><img id="map" src="ewha-map.png" alt="梨大商圈"></div></div>
 
+<div id="offline" class="wait">⏳ 快取中…</div>
 <div id="title">梨大商圈 · 이대</div>
 <div id="compass"><div class="nd"></div><span>N</span></div>
 <div id="coords"></div>
@@ -213,7 +220,25 @@ function openNaver(){ if(!cur)return; window.open('https://map.naver.com/p/searc
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600);}
 
 fit(); window.addEventListener('resize',()=>{const s=scale;fit();});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+
+// ── 離線就緒狀態燈:斷網前用它確認快取抓完了 ──
+const offBadge=document.getElementById('offline');
+async function checkOffline(){
+  try{
+    if(!('caches' in window)){offBadge.style.display='none';return;}
+    const need=['./index.html','./ewha-map.png','./manifest.webmanifest','./icon-192.png'];
+    const have=await Promise.all(need.map(u=>caches.match(u,{ignoreSearch:true}).then(r=>!!r)));
+    const n=have.filter(Boolean).length;
+    const ctrl=!!navigator.serviceWorker.controller;
+    if(n===need.length && ctrl){ offBadge.textContent='✅ 已可離線使用'; offBadge.className='ok'; }
+    else { offBadge.textContent='⏳ 快取中 '+n+'/'+need.length+(ctrl?'':' ·下拉重整'); offBadge.className='wait'; }
+  }catch(e){ offBadge.textContent='⚠️ 快取失敗'; offBadge.className='err'; }
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.ready.then(checkOffline);
+  setInterval(checkOffline,1500); checkOffline();
+} else { offBadge.style.display='none'; }
 </script>
 </body>
 </html>
