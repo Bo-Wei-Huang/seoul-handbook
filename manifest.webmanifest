@@ -1,0 +1,14 @@
+{
+  "name": "首爾 Q 版自由行圖鑑",
+  "short_name": "首爾圖鑑",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDF6E3",
+  "theme_color": "#FDF6E3",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
