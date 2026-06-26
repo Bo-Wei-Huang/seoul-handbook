@@ -92,9 +92,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--cream);
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
   padding:9px 16px;border-radius:20px;font-size:13px;z-index:80;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
-#offline{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:10px;z-index:90;
-  font-size:12px;font-weight:700;padding:5px 11px;border-radius:14px;white-space:nowrap;
-  box-shadow:0 2px 8px rgba(0,0,0,.18);transition:opacity .4s}
+/* 離線測試橫條:整條頂部、超大、不可能漏看(測試通過後再縮回小藥丸) */
+#offline{position:fixed;top:0;left:0;right:0;z-index:200;
+  padding:calc(env(safe-area-inset-top) + 9px) 12px 9px;text-align:center;
+  font-size:14px;font-weight:800;letter-spacing:.3px;cursor:pointer;
+  box-shadow:0 2px 10px rgba(0,0,0,.25)}
 #offline.ok{background:#2e7d32;color:#fff}
 #offline.wait{background:#E9B949;color:#3A3228}
 #offline.err{background:#E76F51;color:#fff}
@@ -103,7 +105,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--cream);
 <body>
 <div id="viewport"><div id="canvas"><img id="map" src="ewha-map.png" alt="梨大商圈"></div></div>
 
-<div id="offline" class="wait">⏳ 快取中…</div>
+<div id="offline" class="wait">v3 · ⏳ 載入中…（點我看細節）</div>
 <div id="title">梨大商圈 · 이대</div>
 <div id="compass"><div class="nd"></div><span>N</span></div>
 <div id="coords"></div>
@@ -221,24 +223,40 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 
 fit(); window.addEventListener('resize',()=>{const s=scale;fit();});
 
-// ── 離線就緒狀態燈:斷網前用它確認快取抓完了 ──
+// ── 離線就緒狀態燈(v3):斷網前用它確認快取抓完了;點它看診斷細節 ──
+const VERSION='v3';
+const NEED=['./index.html','./ewha-map.png','./manifest.webmanifest','./icon-192.png'];
 const offBadge=document.getElementById('offline');
+async function cachedFlags(){
+  if(!('caches' in window)) return null;
+  return Promise.all(NEED.map(u=>caches.match(u,{ignoreSearch:true}).then(r=>!!r)));
+}
 async function checkOffline(){
   try{
-    if(!('caches' in window)){offBadge.style.display='none';return;}
-    const need=['./index.html','./ewha-map.png','./manifest.webmanifest','./icon-192.png'];
-    const have=await Promise.all(need.map(u=>caches.match(u,{ignoreSearch:true}).then(r=>!!r)));
-    const n=have.filter(Boolean).length;
+    const flags=await cachedFlags();
+    if(!flags){ offBadge.textContent=VERSION+' · ⚠️ 此瀏覽器不支援快取'; offBadge.className='err'; return; }
+    const n=flags.filter(Boolean).length;
     const ctrl=!!navigator.serviceWorker.controller;
-    if(n===need.length && ctrl){ offBadge.textContent='✅ 已可離線使用'; offBadge.className='ok'; }
-    else { offBadge.textContent='⏳ 快取中 '+n+'/'+need.length+(ctrl?'':' ·下拉重整'); offBadge.className='wait'; }
-  }catch(e){ offBadge.textContent='⚠️ 快取失敗'; offBadge.className='err'; }
+    if(n===NEED.length && ctrl){ offBadge.textContent=VERSION+' · ✅ 已可離線使用'; offBadge.className='ok'; }
+    else { offBadge.textContent=VERSION+' · ⏳ 快取中 '+n+'/'+NEED.length+(ctrl?'':' ·下拉重整'); offBadge.className='wait'; }
+  }catch(e){ offBadge.textContent=VERSION+' · ⚠️ '+e.message; offBadge.className='err'; }
 }
+// 點橫條 → 跳出診斷(把這畫面截圖給我,就知道卡在哪)
+offBadge.addEventListener('click',async()=>{
+  try{
+    const ctrl=navigator.serviceWorker&&navigator.serviceWorker.controller?'YES':'NO';
+    const keys=('caches' in window)?(await caches.keys()).join(', ')||'(空)':'無 caches API';
+    const flags=await cachedFlags();
+    const lines=flags?NEED.map((u,i)=>(flags[i]?'✓':'✗')+' '+u).join('\n'):'(無 caches API)';
+    const standalone=(navigator.standalone===true)||matchMedia('(display-mode:standalone)').matches;
+    alert('版本 '+VERSION+'\nSW 控制中: '+ctrl+'\n快取庫: '+keys+'\n\n各檔是否已快取:\n'+lines+'\n\n獨立App模式: '+standalone+'\nSW 支援: '+('serviceWorker' in navigator));
+  }catch(e){ alert('診斷錯誤: '+e.message); }
+});
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('sw.js').catch(()=>{});
+  navigator.serviceWorker.register('sw.js').catch(e=>{offBadge.textContent=VERSION+' · ⚠️ SW註冊失敗 '+e.message;offBadge.className='err';});
   navigator.serviceWorker.ready.then(checkOffline);
   setInterval(checkOffline,1500); checkOffline();
-} else { offBadge.style.display='none'; }
+} else { offBadge.textContent=VERSION+' · ⚠️ 此瀏覽器無 service worker'; offBadge.className='err'; }
 </script>
 </body>
 </html>

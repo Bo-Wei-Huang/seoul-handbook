@@ -1,6 +1,6 @@
 // 離線快取 (出發前用 Safari 開一次 → 之後全離線)
 // v2: 逐檔快取(一個失敗不拖垮全部) + 導覽離線回退 index.html + 忽略 query
-const CACHE = 'ewha-v2';
+const CACHE = 'ewha-v3';
 const ASSETS = ['./', './index.html', './ewha-map.png', './manifest.webmanifest', './icon-192.png'];
 
 self.addEventListener('install', e => {
