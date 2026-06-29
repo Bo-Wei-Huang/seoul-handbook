@@ -21,7 +21,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--cream);
   font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;color:var(--ink)}
 #viewport{position:fixed;inset:0;overflow:hidden;touch-action:none;background:var(--cream2)}
 #canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
-#map{display:block;width:1280px;height:864px;user-select:none;-webkit-user-drag:none;pointer-events:none;
+#map{display:block;width:880px;height:1280px;user-select:none;-webkit-user-drag:none;pointer-events:none;
   filter:drop-shadow(0 8px 24px rgba(60,50,40,.18))}
 .hot{position:absolute;width:38px;height:38px;margin:-19px 0 0 -19px;border:none;background:none;cursor:pointer;padding:0;touch-action:none}
 .hot .pin,.hot .pulse{pointer-events:none}  /* 浮動視覺不吃事件,讓靜止的 .hot 按鈕當命中目標 */
@@ -100,10 +100,23 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--cream);
 #offline.wait{background:#E9B949;color:#3A3228}
 #offline.err{background:#E76F51;color:#fff}
 #offline.hide{opacity:0;pointer-events:none}
+/* 導航疊加層: 道路方向流動 + 地鐵出口 */
+#netflow{position:absolute;top:0;left:0;width:880px;height:1280px;pointer-events:none;z-index:2;overflow:visible}
+#netflow polyline{fill:none;stroke:#37c9c0;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;
+  opacity:.5;stroke-dasharray:1.5 15;animation:flow 1.15s linear infinite;
+  filter:drop-shadow(0 0 3px rgba(55,201,192,.85))}
+#netflow polyline.main{stroke:#ffce4d;stroke-width:4.5;opacity:.7;filter:drop-shadow(0 0 5px rgba(255,206,77,.95))}
+@keyframes flow{to{stroke-dashoffset:-33}}
+@media (prefers-reduced-motion:reduce){#netflow polyline{animation:none;opacity:.35}}
+.exit{position:absolute;transform:translate(-50%,-50%);z-index:6;display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.exit .b{width:26px;height:26px;border-radius:7px;background:#1f4e9b;color:#fff;font-size:15px;
+  display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+.exit .t{margin-top:2px;font-size:9px;font-weight:800;color:#1f4e9b;background:rgba(255,255,255,.9);
+  padding:1px 4px;border-radius:4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 </style>
 </head>
 <body>
-<div id="viewport"><div id="canvas"><img id="map" src="ewha-map.png" alt="梨大商圈"></div></div>
+<div id="viewport"><div id="canvas"><img id="map" src="ewha-map.png" alt="梨大商圈"><svg id="netflow" viewBox="0 0 880 1280" preserveAspectRatio="none"></svg></div></div>
 
 <div id="offline" class="wait">v3 · ⏳ 載入中…（點我看細節）</div>
 <div id="title">梨大商圈 · 이대</div>
@@ -163,7 +176,9 @@ const POIS=[
 ];
 
 const canvas=document.getElementById('canvas'), vp=document.getElementById('viewport'), mapEl=document.getElementById('map');
-const MAPW=1280, MAPH=864;
+const MAPW=880, MAPH=1280;
+// 導航疊加資料(由 ewha_scene_meta.json 產生:路網螢幕折線 + 地鐵出口,皆對齊水彩底圖)
+const NAV={"res":[880,1280],"net":[{"k":"sub","p":[[263,785],[309,754],[353,724],[457,630],[461,627],[512,581],[570,530],[629,473]]},{"k":"main","p":[[240,804],[294,822],[365,845],[441,871],[510,894],[522,897]]},{"k":"alley","p":[[241,559],[326,587],[457,630]]},{"k":"alley","p":[[367,463],[570,530]]},{"k":"alley","p":[[730,584],[614,681],[504,771]]},{"k":"alley","p":[[424,746],[532,654],[647,556]]},{"k":"main","p":[[240,804],[224,816]]},{"k":"alley","p":[[629,473],[760,517]]},{"k":"alley","p":[[481,377],[594,417]]},{"k":"alley","p":[[120,650],[217,681],[353,724]]},{"k":"alley","p":[[345,861],[365,845]]},{"k":"alley","p":[[353,724],[424,746],[426,747],[504,771],[633,813]]},{"k":"alley","p":[[305,510],[512,581]]},{"k":"alley","p":[[570,530],[647,556],[730,584],[869,634]]},{"k":"alley","p":[[532,654],[614,681]]},{"k":"alley","p":[[532,654],[457,630]]},{"k":"sub","p":[[629,473],[441,407]]},{"k":"main","p":[[11,732],[163,780],[240,804]]},{"k":"main","p":[[263,785],[36,714]]},{"k":"main","p":[[263,785],[240,804]]},{"k":"main","p":[[550,875],[533,870],[344,810],[263,785]]}],"exits":[[281,761],[318,767],[332,807]]};
 let scale=1, tx=0, ty=0, minScale=0.2, maxScale=2.5;
 function apply(){canvas.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`}
 function fit(){ const w=vp.clientWidth,h=vp.clientHeight; scale=Math.min(w/MAPW, h/MAPH)*1.02; minScale=scale*0.7;
@@ -172,6 +187,16 @@ function fit(){ const w=vp.clientWidth,h=vp.clientHeight; scale=Math.min(w/MAPW,
 POIS.forEach(p=>{ const b=document.createElement('button'); b.className='hot'; b.style.left=p.x+'%'; b.style.top=p.y+'%';
   b.innerHTML='<span class="pulse"></span><span class="pin">📍</span>';
   b.addEventListener('pointerdown',e=>{e.stopPropagation();openCard(p)}); canvas.appendChild(b); });
+
+// ── 導航疊加層: 道路方向流動(沿路網,主街黃/巷弄青) + 地鐵出口(已推到路面外) ──
+const SVGNS='http://www.w3.org/2000/svg', svgNet=document.getElementById('netflow');
+NAV.net.forEach(r=>{ const pl=document.createElementNS(SVGNS,'polyline');
+  pl.setAttribute('points', r.p.map(q=>q.join(',')).join(' '));
+  if(r.k==='main'||r.k==='sub') pl.classList.add('main');
+  svgNet.appendChild(pl); });
+NAV.exits.forEach(e=>{ const d=document.createElement('div'); d.className='exit';
+  d.style.left=(e[0]/MAPW*100)+'%'; d.style.top=(e[1]/MAPH*100)+'%';
+  d.innerHTML='<div class="b">🚇</div><div class="t">이대역</div>'; canvas.appendChild(d); });
 
 // ── pan / zoom ──
 const ptrs=new Map(); let lastDist=0, moved=false, downX=0,downY=0;
@@ -224,7 +249,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 fit(); window.addEventListener('resize',()=>{const s=scale;fit();});
 
 // ── 離線就緒狀態燈(v3):斷網前用它確認快取抓完了;點它看診斷細節 ──
-const VERSION='v3';
+const VERSION='v5';
 const NEED=['./index.html','./ewha-map.png','./manifest.webmanifest','./icon-192.png'];
 const offBadge=document.getElementById('offline');
 async function cachedFlags(){
