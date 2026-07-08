@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>梨大 · 霓虹招牌 demo</title>
+<style>
+  :root{ --pink:#ff5fa2; --orange:#ff9838; --blue:#3ea0ff; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; background:#0d1016; color:#eee;
+    font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif; }
+  /* 地圖畫布:等比 848×1233,寬度撐滿、置中 */
+  #wrap{ position:relative; width:100%; max-width:560px; margin:0 auto; }
+  #map{ position:relative; width:100%; aspect-ratio:848/1233;
+    background:url("ewha_base_signed.png") center/cover no-repeat; overflow:hidden; }
+  /* ── 霓虹招牌 ── */
+  .sign{ position:absolute; transform:translate(-50%,-100%);
+    display:flex; align-items:center; gap:7px; padding:6px 11px 6px 6px;
+    background:rgba(16,20,27,.86); border:1px solid rgba(255,255,255,.16);
+    border-radius:13px; cursor:pointer; white-space:nowrap;
+    backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+    box-shadow:0 4px 14px rgba(0,0,0,.5); transition:transform .12s; }
+  .sign:active{ transform:translate(-50%,-100%) scale(.94); }
+  .sign .badge{ width:26px; height:26px; border-radius:50%;
+    display:grid; place-items:center; font-size:15px; flex:0 0 auto; }
+  .sign .txt{ display:flex; flex-direction:column; line-height:1.12; }
+  .sign .txt b{ font-size:13px; font-weight:800; letter-spacing:.3px; }
+  .sign .txt i{ font-size:10px; font-style:normal; opacity:.72; }
+  .sign .stem{ position:absolute; left:50%; bottom:-7px; width:2px; height:8px;
+    transform:translateX(-50%); }
+  .sign .stem::after{ content:""; position:absolute; left:50%; bottom:-3px;
+    width:6px; height:6px; border-radius:50%; transform:translateX(-50%); }
+  /* 品牌色光暈 */
+  .g-pink{ box-shadow:0 0 16px rgba(255,95,162,.55),0 4px 14px rgba(0,0,0,.5); }
+  .g-pink .badge{ background:var(--pink); box-shadow:0 0 10px var(--pink); }
+  .g-pink .txt b{ text-shadow:0 0 8px rgba(255,95,162,.6); }
+  .g-pink .stem,.g-pink .stem::after{ background:var(--pink); box-shadow:0 0 8px var(--pink); }
+  .g-orange{ box-shadow:0 0 16px rgba(255,152,56,.5),0 4px 14px rgba(0,0,0,.5); }
+  .g-orange .badge{ background:var(--orange); box-shadow:0 0 10px var(--orange); }
+  .g-orange .txt b{ text-shadow:0 0 8px rgba(255,152,56,.6); }
+  .g-orange .stem,.g-orange .stem::after{ background:var(--orange); box-shadow:0 0 8px var(--orange); }
+  /* ── 捷運出口 ── */
+  .exit{ position:absolute; transform:translate(-50%,-50%);
+    display:flex; align-items:center; gap:4px; padding:4px 9px 4px 5px;
+    background:rgba(16,20,27,.9); border:1px solid rgba(62,160,255,.5);
+    border-radius:20px; font-size:12px; font-weight:800; cursor:pointer;
+    box-shadow:0 0 16px rgba(62,160,255,.5); }
+  .exit .m{ width:20px;height:20px;border-radius:50%;background:var(--blue);
+    display:grid;place-items:center;font-size:12px;box-shadow:0 0 8px var(--blue); }
+  .exit b{ text-shadow:0 0 8px rgba(62,160,255,.7); }
+  /* ── 標題 / 說明 ── */
+  #hd{ position:absolute; top:10px; left:12px; z-index:5;
+    font-size:14px; font-weight:800; text-shadow:0 1px 4px #000; }
+  #hd small{ display:block; font-weight:500; font-size:10px; opacity:.75; }
+  #legend{ position:absolute; right:10px; top:10px; z-index:5;
+    font-size:10px; text-align:right; text-shadow:0 1px 3px #000; line-height:1.5; }
+  .dot{ display:inline-block; width:8px;height:8px;border-radius:50%; margin-left:4px; vertical-align:middle;}
+  /* ── 資訊卡(底部滑出)── */
+  #card{ position:fixed; left:0; right:0; bottom:0; z-index:20;
+    max-width:560px; margin:0 auto; transform:translateY(110%); transition:transform .28s cubic-bezier(.2,.9,.3,1);
+    background:#151a22; border-top:1px solid rgba(255,255,255,.12);
+    border-radius:18px 18px 0 0; padding:16px 18px 26px; box-shadow:0 -8px 30px rgba(0,0,0,.6); }
+  #card.on{ transform:translateY(0); }
+  #card .row1{ display:flex; align-items:center; gap:10px; }
+  #card .cbadge{ width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:20px;flex:0 0 auto; }
+  #card h2{ margin:0; font-size:18px; }
+  #card .kr{ font-size:12px; opacity:.7; margin-top:1px; }
+  #card .meta{ margin-top:12px; font-size:13px; line-height:1.7; }
+  #card .addr{ margin-top:10px; padding:9px 11px; background:#0d1016; border-radius:10px;
+    font-size:16px; font-weight:700; letter-spacing:.3px; }
+  #card .addr small{ display:block; font-size:10px; font-weight:500; opacity:.6; margin-bottom:2px; }
+  #card .x{ position:absolute; top:12px; right:14px; font-size:22px; opacity:.6; cursor:pointer; }
+  #scrim{ position:fixed; inset:0; z-index:15; background:rgba(0,0,0,.4); opacity:0; pointer-events:none; transition:opacity .28s; }
+  #scrim.on{ opacity:1; pointer-events:auto; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="map">
+    <div id="hd">梨大 · 霓虹招牌 demo<small>HTML 疊層 · 可點 · 出口為真實座標</small></div>
+    <div id="legend">逛街<span class="dot" style="background:#ff5fa2"></span><br>吃<span class="dot" style="background:#ff9838"></span><br>出口<span class="dot" style="background:#3ea0ff"></span></div>
+  </div>
+</div>
+
+<div id="scrim"></div>
+<div id="card">
+  <span class="x" onclick="closeCard()">✕</span>
+  <div class="row1"><div class="cbadge" id="c-badge"></div>
+    <div><h2 id="c-name"></h2><div class="kr" id="c-kr"></div></div></div>
+  <div class="meta" id="c-meta"></div>
+  <div class="addr"><small>韓文地址(給司機看)</small><span id="c-addr"></span></div>
+</div>
+
+<script>
+// 示範 POI:x/y = 佔底圖百分比;cat 決定配色/icon;出口為真實投影座標(×0.963 對齊本圖)
+const POIS = [
+  { id:"oy", cat:"COSMETIC", g:"pink", icon:"💄", name:"Olive Young 梨大", kr:"올리브영 이대",
+    x:30, y:40, hours:"10:00–22:30", price:"—", tip:"面膜/零食掃貨首選,退稅櫃台在後方",
+    addr:"서울 서대문구 이화여대길 52" },
+  { id:"ds", cat:"DESSERT", g:"orange", icon:"🍰", name:"雪冰 梨大", kr:"설빙 이대점",
+    x:62, y:46, hours:"11:00–23:00", price:"₩9,000", tip:"黃豆粉雪花冰經典,2 人分一碗剛好",
+    addr:"서울 서대문구 이화여대길 30 2층" },
+  { id:"kp", cat:"KPOP", g:"pink", icon:"🎤", name:"韓團周邊店", kr:"K-POP 굿즈",
+    x:40, y:22, hours:"12:00–21:00", price:"—", tip:"小卡/應援物,結帳前先看有沒有無傷卡",
+    addr:"서울 서대문구 이화여대길 14" },
+];
+const EXITS = [ // 真實 lat/lng 投影(880×1280)再 ×0.9634 對齊 848×1233,轉百分比
+  { n:"2", x:41.5, y:70.3 }, { n:"3", x:48.5, y:69.6 }, { n:"4", x:58.6, y:73.2 },
+];
+const CATZH = { COSMETIC:"藥妝", DESSERT:"甜點", KPOP:"韓團周邊" };
+const map = document.getElementById("map");
+
+POIS.forEach(p=>{
+  const el = document.createElement("button");
+  el.className = "sign g-"+p.g;
+  el.style.left = p.x+"%"; el.style.top = p.y+"%";
+  el.innerHTML = `<span class="badge">${p.icon}</span>
+    <span class="txt"><b>${p.name}</b><i>${p.kr}</i></span><span class="stem"></span>`;
+  el.onclick = ()=>openCard(p);
+  map.appendChild(el);
+});
+EXITS.forEach(e=>{
+  const el = document.createElement("button");
+  el.className = "exit";
+  el.style.left = e.x+"%"; el.style.top = e.y+"%";
+  el.innerHTML = `<span class="m">🚇</span><b>${e.n}번</b>`;
+  el.onclick = ()=>openCard({icon:"🚇",g:"blue",name:"이대역 "+e.n+"번 출구",kr:"2호선",
+    cat:"EXIT",hours:"—",price:"—",tip:"梨大商圈主要出入口",addr:"이대역 "+e.n+"번 출구"});
+  map.appendChild(el);
+});
+
+const card=document.getElementById("card"), scrim=document.getElementById("scrim");
+function openCard(p){
+  document.getElementById("c-badge").textContent=p.icon;
+  document.getElementById("c-badge").style.background = p.g=="orange"?"var(--orange)":p.g=="blue"?"var(--blue)":"var(--pink)";
+  document.getElementById("c-name").textContent=p.name;
+  document.getElementById("c-kr").textContent=(CATZH[p.cat]||p.cat)+" · "+p.kr;
+  document.getElementById("c-meta").innerHTML=
+    `🕒 ${p.hours} &nbsp;·&nbsp; 💰 ${p.price}<br>💬 ${p.tip}`;
+  document.getElementById("c-addr").textContent=p.addr;
+  card.classList.add("on"); scrim.classList.add("on");
+}
+function closeCard(){ card.classList.remove("on"); scrim.classList.remove("on"); }
+scrim.onclick=closeCard;
+</script>
+</body>
+</html>
